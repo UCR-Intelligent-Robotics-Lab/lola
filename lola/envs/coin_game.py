@@ -5,7 +5,7 @@ import gym
 import numpy as np
 
 from gym.spaces import Discrete, Tuple
-from gym.spaces import prng
+from gym.utils import seeding
 
 
 class CoinGameVec:
@@ -28,22 +28,22 @@ class CoinGameVec:
         self.batch_size = batch_size
         # The 4 channels stand for 2 players and 2 coin positions
         self.ob_space_shape = [4, grid_size, grid_size]
-
         self.step_count = None
+        self.np_random = None
 
     def reset(self):
+        # Initialize a random number generator.
+        self.np_random, _ = seeding.np_random(None)
         self.step_count = 0
-        self.red_coin = prng.np_random.randint(2, size=self.batch_size)
+        self.red_coin = self.np_random.randint(2, size=self.batch_size)
         # Agent and coin positions
-        self.red_pos  = prng.np_random.randint(
-            self.grid_size, size=(self.batch_size, 2))
-        self.blue_pos = prng.np_random.randint(
-            self.grid_size, size=(self.batch_size, 2))
+        self.red_pos  = self.np_random.randint(self.grid_size, size=(self.batch_size, 2))
+        self.blue_pos = self.np_random.randint(self.grid_size, size=(self.batch_size, 2))
         self.coin_pos = np.zeros((self.batch_size, 2), dtype=np.int8)
         for i in range(self.batch_size):
             # Make sure coins don't overlap
             while self._same_pos(self.red_pos[i], self.blue_pos[i]):
-                self.blue_pos[i] = prng.np_random.randint(self.grid_size, size=2)
+                self.blue_pos[i] = self.np_random.randint(self.grid_size, size=2)
             self._generate_coin(i)
         return self._generate_state()
 
@@ -52,11 +52,9 @@ class CoinGameVec:
         # Make sure coin has a different position than the agents
         success = 0
         while success < 2:
-            self.coin_pos[i] = prng.np_random.randint(self.grid_size, size=(2))
-            success  = 1 - self._same_pos(self.red_pos[i],
-                                          self.coin_pos[i])
-            success += 1 - self._same_pos(self.blue_pos[i],
-                                          self.coin_pos[i])
+            self.coin_pos[i] = self.np_random.randint(self.grid_size, size=2)
+            success  = 1 - self._same_pos(self.red_pos[i], self.coin_pos[i])
+            success += 1 - self._same_pos(self.blue_pos[i], self.coin_pos[i])
 
     def _same_pos(self, x, y):
         return (x == y).all()
@@ -78,10 +76,8 @@ class CoinGameVec:
             assert ac0 in {0, 1, 2, 3} and ac1 in {0, 1, 2, 3}
 
             # Move players
-            self.red_pos[j] = \
-                (self.red_pos[j] + self.MOVES[ac0]) % self.grid_size
-            self.blue_pos[j] = \
-                (self.blue_pos[j] + self.MOVES[ac1]) % self.grid_size
+            self.red_pos[j] = (self.red_pos[j] + self.MOVES[ac0]) % self.grid_size
+            self.blue_pos[j] = (self.blue_pos[j] + self.MOVES[ac1]) % self.grid_size
 
         # Compute rewards
         reward_red, reward_blue = [], []
@@ -99,7 +95,6 @@ class CoinGameVec:
                 else:
                     reward_red.append(0)
                     reward_blue.append(0)
-
             else:
                 if self._same_pos(self.red_pos[i], self.coin_pos[i]):
                     generate = True
@@ -118,9 +113,7 @@ class CoinGameVec:
 
         reward = [np.array(reward_red), np.array(reward_blue)]
         self.step_count += 1
-        done = np.array([
-            (self.step_count == self.max_steps) for _ in range(self.batch_size)
-        ])
+        done = np.array([(self.step_count == self.max_steps) for _ in range(self.batch_size)])
         state = self._generate_state()
 
         return state, reward, done
